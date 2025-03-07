@@ -9,6 +9,7 @@ import (
 	"github.com/iangechuki/go-ecommerce/internal/env"
 	"github.com/iangechuki/go-ecommerce/internal/mailer"
 	"github.com/iangechuki/go-ecommerce/internal/store"
+	"go.uber.org/zap"
 )
 
 //	@title	Go Ecommerce API
@@ -61,6 +62,9 @@ func main() {
 			exp: time.Hour * 24 * 3,
 		},
 	}
+	// Logger
+	logger := zap.Must(zap.NewDevelopment()).Sugar()
+	defer logger.Sync()
 
 	// database
 	db, err := db.New(
@@ -96,6 +100,7 @@ func main() {
 		accessAuthenticator:  accessAuthenticator,
 		refreshAuthenticator: refreshAuthenticator,
 		mailer:               resendClient,
+		logger:               logger,
 	}
 	log.Println("name", env.GetString("FROM_EMAIL", "test"))
 	mux := app.mount()

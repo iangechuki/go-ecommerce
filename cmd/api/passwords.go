@@ -31,20 +31,22 @@ type ForgotPassswordPayload struct {
 func (app *application) forgotPasswordHandler(w http.ResponseWriter, r *http.Request) {
 	var payload ForgotPassswordPayload
 	if err := readJSON(w, r, &payload); err != nil {
-		writeJSONError(w, http.StatusBadRequest, err.Error())
+		app.badRequestResponse(w, r, err)
+		return
 	}
 	if err := Validate.Struct(payload); err != nil {
-		writeJSONError(w, http.StatusBadRequest, err.Error())
+		app.badRequestResponse(w, r, err)
+		return
 	}
 	ctx := r.Context()
 	user, err := app.store.Users.GetByEmail(ctx, payload.Email)
 	if err != nil {
 		switch err {
 		case store.ErrRecordNotFound:
-			writeJSONError(w, http.StatusUnauthorized, "invalid credentials")
+			app.unauthorizedErrorResponse(w, r, err, "invalid credentials")
 			return
 		default:
-			writeJSONError(w, http.StatusInternalServerError, err.Error())
+			app.internalServerError(w, r, err)
 			return
 		}
 	}
@@ -54,7 +56,7 @@ func (app *application) forgotPasswordHandler(w http.ResponseWriter, r *http.Req
 
 	err = app.store.Users.CreatePasswordResetToken(ctx, user, hashToken, app.config.auth.accessToken.exp)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		app.internalServerError(w, r, err)
 		return
 	}
 	passwordResetLink := fmt.Sprintf("%s/reset-password?token=%s", app.config.frontendURL, plainToken)
@@ -67,7 +69,7 @@ func (app *application) forgotPasswordHandler(w http.ResponseWriter, r *http.Req
 	}
 	sendID, err := app.mailer.Send(mailer.PasswordResetTemplate, user.Username, user.Email, vars, true)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		app.internalServerError(w, r, err)
 		return
 	}
 
@@ -96,29 +98,30 @@ func (app *application) resetPassword(w http.ResponseWriter, r *http.Request) {
 	var payload ResetPasswordPayload
 	token := r.URL.Query().Get("token")
 	if token == "" {
-		writeJSONError(w, http.StatusBadRequest, "token is required")
+		app.badRequestResponse(w, r, fmt.Errorf("token is required"))
 		return
 	}
 	if err := readJSON(w, r, &payload); err != nil {
-		writeJSONError(w, http.StatusBadRequest, err.Error())
+		app.badRequestResponse(w, r, err)
+		return
 	}
 	if err := Validate.Struct(payload); err != nil {
-		writeJSONError(w, http.StatusBadRequest, err.Error())
+		app.badRequestResponse(w, r, err)
 		return
 	}
 	ctx := r.Context()
 	if err := app.store.Users.ResetPasswordUsingToken(ctx, token, payload.Password); err != nil {
 		switch err {
 		case store.ErrRecordNotFound:
-			writeJSONError(w, http.StatusUnauthorized, "invalid token")
+			app.unauthorizedErrorResponse(w, r, err, "invalid token")
 			return
 		default:
-			writeJSONError(w, http.StatusInternalServerError, err.Error())
+			app.internalServerError(w, r, err)
 			return
 		}
 	}
 	if err := app.store.Sessions.DeleteByUserID(ctx, 1); err != nil {
-		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		app.internalServerError(w, r, err)
 		return
 	}
 	jsonResponse(w, http.StatusOK, "password reset successfully")
@@ -146,27 +149,29 @@ type ChangePasswordPayload struct {
 func (app *application) changePasswordHandler(w http.ResponseWriter, r *http.Request) {
 	var payload ChangePasswordPayload
 	if err := readJSON(w, r, &payload); err != nil {
-		writeJSONError(w, http.StatusBadRequest, err.Error())
+		app.badRequestResponse(w, r, err)
+		return
 	}
 	if err := Validate.Struct(payload); err != nil {
-		writeJSONError(w, http.StatusBadRequest, err.Error())
+		app.badRequestResponse(w, r, err)
+		return
 	}
 	ctx := r.Context()
 	user, err := app.store.Users.GetByEmail(ctx, payload.Email)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		app.internalServerError(w, r, err)
 		return
 	}
 	if err := user.Password.Compare(payload.OldPassword); err != nil {
-		writeJSONError(w, http.StatusUnauthorized, err.Error())
+		app.unauthorizedErrorResponse(w, r, err, "invalid credentials")
 		return
 	}
 	if err := user.Password.Set(payload.NewPassword); err != nil {
-		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		app.internalServerError(w, r, err)
 		return
 	}
 	if err := app.store.Users.Update(ctx, user); err != nil {
-		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		app.internalServerError(w, r, err)
 		return
 	}
 	jsonResponse(w, http.StatusOK, "password changed successfully")

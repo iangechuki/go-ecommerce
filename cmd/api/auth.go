@@ -37,11 +37,12 @@ type UserTokenResponse struct {
 func (app *application) registerUserHandler(w http.ResponseWriter, r *http.Request) {
 	var payload RegisterUserPayload
 	if err := readJSON(w, r, &payload); err != nil {
-		writeJSONError(w, http.StatusBadRequest, err.Error())
+		app.badRequestResponse(w, r, err)
+		return
 	}
 
 	if err := Validate.Struct(payload); err != nil {
-		writeJSONError(w, http.StatusBadRequest, err.Error())
+		app.badRequestResponse(w, r, err)
 	}
 	ctx := r.Context()
 
@@ -51,7 +52,7 @@ func (app *application) registerUserHandler(w http.ResponseWriter, r *http.Reque
 		IsVerified: false,
 	}
 	if err := user.Password.Set(payload.Password); err != nil {
-		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		app.internalServerError(w, r, err)
 		return
 	}
 	plainToken := uuid.New().String()
@@ -59,7 +60,7 @@ func (app *application) registerUserHandler(w http.ResponseWriter, r *http.Reque
 	hashToken := hex.EncodeToString(hash[:])
 
 	if err := app.store.Users.CreateAndInvite(ctx, user, hashToken, app.config.mail.exp); err != nil {
-		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		app.internalServerError(w, r, err)
 		return
 	}
 
@@ -75,8 +76,7 @@ func (app *application) registerUserHandler(w http.ResponseWriter, r *http.Reque
 	}
 	sendID, err := app.mailer.Send(mailer.UserWelcomeTemplate, user.Username, user.Email, vars, true)
 	if err != nil {
-		log.Println(err)
-		jsonResponse(w, http.StatusInternalServerError, err.Error())
+		app.internalServerError(w, r, err)
 	}
 	log.Println("Email sent,email id:", sendID)
 	jsonResponse(w, http.StatusCreated, user)
@@ -99,7 +99,7 @@ func (app *application) verifyUserHandler(w http.ResponseWriter, r *http.Request
 	tokenString := r.URL.Query().Get("token")
 	log.Println(tokenString)
 	if tokenString == "" {
-		jsonResponse(w, http.StatusBadRequest, "token is required")
+		app.badRequestResponse(w, r, fmt.Errorf("token is required"))
 		return
 	}
 
@@ -108,10 +108,10 @@ func (app *application) verifyUserHandler(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		switch err {
 		case store.ErrRecordNotFound:
-			jsonResponse(w, http.StatusUnauthorized, "invalid token")
+			app.notFoundResponse(w, r, err)
 			return
 		default:
-			jsonResponse(w, http.StatusInternalServerError, err.Error())
+			app.internalServerError(w, r, err)
 			return
 		}
 	}
@@ -143,10 +143,11 @@ type LoginResponse struct {
 func (app *application) loginUserHandler(w http.ResponseWriter, r *http.Request) {
 	var payload LoginPayload
 	if err := readJSON(w, r, &payload); err != nil {
-		writeJSONError(w, http.StatusBadRequest, err.Error())
+		app.badRequestResponse(w, r, err)
+		return
 	}
 	if err := Validate.Struct(payload); err != nil {
-		writeJSONError(w, http.StatusBadRequest, err.Error())
+		app.badRequestResponse(w, r, err)
 	}
 	ctx := r.Context()
 	user, err := app.store.Users.GetByEmail(ctx, payload.Email)
@@ -154,25 +155,25 @@ func (app *application) loginUserHandler(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		switch err {
 		case store.ErrRecordNotFound:
-			writeJSONError(w, http.StatusUnauthorized, "invalid credentials")
+			app.unauthorizedErrorResponse(w, r, fmt.Errorf("invalid credentials"), "invalid credentials")
 			return
 		default:
-			writeJSONError(w, http.StatusInternalServerError, err.Error())
+			app.internalServerError(w, r, err)
 			return
 		}
 	}
 	if err := user.Password.Compare(payload.Password); err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "invalid credentials")
+		app.unauthorizedErrorResponse(w, r, fmt.Errorf("invalid credentials"), "invalid credentials")
 		return
 	}
 	accessToken, err := app.GenerateAccessToken(user.ID)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		app.internalServerError(w, r, err)
 		return
 	}
 	refreshToken, err := app.GenerateRefreshToken(user.ID)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		app.internalServerError(w, r, err)
 		return
 	}
 	tokenHash := sha256.Sum256([]byte(refreshToken))
@@ -187,7 +188,7 @@ func (app *application) loginUserHandler(w http.ResponseWriter, r *http.Request)
 		LastAccessed: time.Now(),
 	}
 	if err := app.store.Sessions.Create(ctx, session); err != nil {
-		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		app.internalServerError(w, r, err)
 		return
 	}
 	cookie := &http.Cookie{
@@ -224,7 +225,7 @@ type RefreshTokenResponse struct {
 func (app *application) refreshTokenHandler(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("refresh_token")
 	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+		app.unauthorizedErrorResponse(w, r, fmt.Errorf("unauthorized"), "token is missing")
 		return
 	}
 	refreshToken := cookie.Value
@@ -236,24 +237,25 @@ func (app *application) refreshTokenHandler(w http.ResponseWriter, r *http.Reque
 	if err != nil {
 		switch err {
 		case store.ErrRecordNotFound:
-			writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+			app.unauthorizedErrorResponse(w, r, err, "")
 			return
 		default:
-			writeJSONError(w, http.StatusInternalServerError, err.Error())
+			app.internalServerError(w, r, err)
 			return
 		}
 	}
 	if session.ExpiresAt.Before(time.Now()) {
-		writeJSONError(w, http.StatusUnauthorized, "session expired")
+		app.unauthorizedErrorResponse(w, r, err, "session expired")
+		// writeJSONError(w, http.StatusUnauthorized, "session expired")
 		return
 	}
 	newAccessToken, err := app.GenerateAccessToken(session.UserID)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		app.internalServerError(w, r, err)
 		return
 	}
 	if err := app.store.Sessions.UpdateLastAccessed(ctx, session.ID); err != nil {
-		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		app.internalServerError(w, r, err)
 		return
 	}
 	response := RefreshTokenResponse{AccessToken: newAccessToken}
@@ -274,7 +276,7 @@ func (app *application) refreshTokenHandler(w http.ResponseWriter, r *http.Reque
 func (app *application) logoutUserHandler(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("refresh_token")
 	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+		app.unauthorizedErrorResponse(w, r, err, "token is missing")
 		return
 	}
 	refreshToken := cookie.Value
@@ -285,15 +287,15 @@ func (app *application) logoutUserHandler(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		switch err {
 		case store.ErrRecordNotFound:
-			writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+			app.unauthorizedErrorResponse(w, r, err, "")
 			return
 		default:
-			writeJSONError(w, http.StatusInternalServerError, err.Error())
+			app.internalServerError(w, r, err)
 			return
 		}
 	}
 	if err := app.store.Sessions.Delete(ctx, session.ID); err != nil {
-		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		app.internalServerError(w, r, err)
 		return
 	}
 	http.SetCookie(w, &http.Cookie{

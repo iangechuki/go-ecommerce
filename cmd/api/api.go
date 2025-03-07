@@ -12,11 +12,13 @@ import (
 	"github.com/iangechuki/go-ecommerce/internal/mailer"
 	"github.com/iangechuki/go-ecommerce/internal/store"
 	httpSwagger "github.com/swaggo/http-swagger/v2"
+	"go.uber.org/zap"
 )
 
 type application struct {
 	config               config
 	store                store.Storage
+	logger               *zap.SugaredLogger
 	accessAuthenticator  auth.Authenticator
 	refreshAuthenticator auth.Authenticator
 	mailer               mailer.Client
@@ -78,10 +80,12 @@ func (app *application) mount() *chi.Mux {
 			httpSwagger.URL("http://localhost:8080/v1/swagger/doc.json"), //The url pointing to API definition
 		))
 		r.Get("/health", healthCheckHandler)
-		r.Get("/mail/verify-account", app.previewVerifyAccountEmailHandler)
-		r.Get("/mail/verify-account/send", app.sendVerifyEmailTrial)
-		r.Get("/mail/reset-password", app.previewEmailForPasswordResetHandler)
-		r.Get("/mail/reset-password/send", app.sendPasswordResetEmailTrial)
+
+		// r.Get("/mail/verify-account", app.previewVerifyAccountEmailHandler)
+		// r.Get("/mail/verify-account/send", app.sendVerifyEmailTrial)
+		// r.Get("/mail/reset-password", app.previewEmailForPasswordResetHandler)
+		// r.Get("/mail/reset-password/send", app.sendPasswordResetEmailTrial)
+
 		r.Route("/auth", func(r chi.Router) {
 			r.Post("/register", app.registerUserHandler)
 			r.Post("/login", app.loginUserHandler)

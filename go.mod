@@ -8,8 +8,10 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/google/uuid v1.6.0
 	github.com/lib/pq v1.10.9
+	github.com/resend/resend-go/v2 v2.15.0
 	github.com/swaggo/http-swagger/v2 v2.0.2
 	github.com/swaggo/swag v1.16.4
+	go.uber.org/zap v1.27.0
 	golang.org/x/crypto v0.33.0
 )
 
@@ -25,8 +27,8 @@ require (
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/mailru/easyjson v0.9.0 // indirect
-	github.com/resend/resend-go/v2 v2.15.0 // indirect
 	github.com/swaggo/files/v2 v2.0.0 // indirect
+	go.uber.org/multierr v1.10.0 // indirect
 	golang.org/x/net v0.35.0 // indirect
 	golang.org/x/sys v0.30.0 // indirect
 	golang.org/x/text v0.22.0 // indirect
