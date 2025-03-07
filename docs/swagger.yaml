@@ -1,4 +1,94 @@
 basePath: /v1
+definitions:
+  main.ChangePasswordPayload:
+    properties:
+      email:
+        maxLength: 255
+        type: string
+      new_password:
+        maxLength: 255
+        minLength: 6
+        type: string
+      old_password:
+        maxLength: 255
+        minLength: 6
+        type: string
+    required:
+    - email
+    - new_password
+    - old_password
+    type: object
+  main.ForgotPassswordPayload:
+    properties:
+      email:
+        maxLength: 255
+        type: string
+    required:
+    - email
+    type: object
+  main.LoginPayload:
+    properties:
+      email:
+        maxLength: 255
+        type: string
+      password:
+        maxLength: 255
+        minLength: 6
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  main.LoginResponse:
+    properties:
+      accessToken:
+        type: string
+      created_at:
+        type: string
+      email:
+        type: string
+      id:
+        type: integer
+      is_verified:
+        type: boolean
+      two_fa_enabled:
+        type: boolean
+      updated_at:
+        type: string
+      username:
+        type: string
+    type: object
+  main.RefreshTokenResponse:
+    properties:
+      access_token:
+        type: string
+    type: object
+  main.RegisterUserPayload:
+    properties:
+      email:
+        maxLength: 255
+        type: string
+      password:
+        maxLength: 255
+        minLength: 6
+        type: string
+      username:
+        maxLength: 255
+        type: string
+    required:
+    - email
+    - password
+    - username
+    type: object
+  main.ResetPasswordPayload:
+    properties:
+      password:
+        maxLength: 255
+        minLength: 6
+        type: string
+    required:
+    - password
+    type: object
 info:
   contact:
     email: support@swagger.io
@@ -11,6 +101,185 @@ info:
   termsOfService: http://swagger.io/terms/
   title: Go Ecommerce API
 paths:
+  /auth/forgot-password:
+    post:
+      consumes:
+      - application/json
+      description: Forgot password
+      parameters:
+      - description: ForgotPassswordPayload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/main.ForgotPassswordPayload'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Bad Request
+          schema: {}
+        "500":
+          description: Internal Server Error
+          schema: {}
+      summary: Forgot password
+      tags:
+      - authentication
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Login a user
+      parameters:
+      - description: LoginPayload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/main.LoginPayload'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.LoginResponse'
+        "400":
+          description: Bad Request
+          schema: {}
+        "500":
+          description: Internal Server Error
+          schema: {}
+      security:
+      - ApiKeyAuth: []
+      summary: Login a user
+      tags:
+      - authentication
+  /auth/logout:
+    get:
+      consumes:
+      - application/json
+      description: Logout a user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Unauthorized
+          schema: {}
+        "500":
+          description: Internal Server Error
+          schema: {}
+      summary: Logout a user
+      tags:
+      - authentication
+  /auth/refresh:
+    get:
+      consumes:
+      - application/json
+      description: Refresh a token
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.RefreshTokenResponse'
+        "401":
+          description: Unauthorized
+          schema: {}
+        "500":
+          description: Internal Server Error
+          schema: {}
+      summary: Refresh a token
+      tags:
+      - authentication
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Register a user
+      parameters:
+      - description: RegisterUserPayload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/main.RegisterUserPayload'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+        "500":
+          description: Internal Server Error
+          schema: {}
+      security:
+      - ApiKeyAuth: []
+      summary: Register a user
+      tags:
+      - authentication
+  /auth/reset-password:
+    post:
+      consumes:
+      - application/json
+      description: Reset password
+      parameters:
+      - description: Reset token
+        in: query
+        name: token
+        required: true
+        type: string
+      - description: ResetPasswordPayload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/main.ResetPasswordPayload'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Bad Request
+          schema: {}
+        "500":
+          description: Internal Server Error
+          schema: {}
+      summary: Reset password
+      tags:
+      - authentication
+  /auth/verify:
+    get:
+      consumes:
+      - application/json
+      description: Verify a user
+      parameters:
+      - description: Verification token
+        in: query
+        name: token
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema: {}
+        "500":
+          description: Internal Server Error
+          schema: {}
+      security:
+      - ApiKeyAuth: []
+      summary: Verify a user
+      tags:
+      - authentication
   /health:
     get:
       consumes:
@@ -24,4 +293,55 @@ paths:
           description: Internal Server Error
           schema: {}
       summary: Health check
+  /products:
+    get:
+      consumes:
+      - application/json
+      description: List products
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+        "500":
+          description: Internal Server Error
+          schema: {}
+      security:
+      - ApiKeyAuth: []
+      summary: List products
+      tags:
+      - products
+  /user/change-password:
+    post:
+      consumes:
+      - application/json
+      description: Change password
+      parameters:
+      - description: ChangePasswordPayload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/main.ChangePasswordPayload'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Bad Request
+          schema: {}
+        "500":
+          description: Internal Server Error
+          schema: {}
+      security:
+      - ApiKeyAuth: []
+      summary: Change password
+      tags:
+      - authentication
+securityDefinitions:
+  ApiKeyAuth:
+    in: header
+    name: Authorization
+    type: apiKey
 swagger: "2.0"
