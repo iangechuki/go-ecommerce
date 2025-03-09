@@ -7,6 +7,7 @@ import { useForm } from "react-hook-form";
 import {zodResolver} from "@hookform/resolvers/zod";
 import {z} from "zod"
 import { SocialLogin } from "./social-login";
+import api from "@/lib/api";
 
 const loginSchema = z.object({
     email:z.string().email(),
@@ -18,7 +19,9 @@ const {register,handleSubmit,formState:{errors,isSubmitting}}=useForm<FormData>(
     resolver:zodResolver(loginSchema)
 })
 const onSubmit = async(data :FormData)=>{
-    console.log(data)
+    await api.post("/v1/auth/login",{
+      data
+    })
 }
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">

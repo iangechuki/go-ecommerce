@@ -27,10 +27,11 @@ type Storage struct {
 	Sessions interface {
 		Create(context.Context, *Session) error
 		GetByToken(ctx context.Context, token string) (*Session, error)
+		GetByUserFingerprint(ctx context.Context, userID int64, fingerprint string) (*Session, error)
 		// GetByTokenID(context.Context, string) (*Session, error)
 		Delete(context.Context, int64) error
 		UpdateLastAccessed(context.Context, int64) error
-		DeleteExpired(context.Context) error
+		DeleteExpired(ctx context.Context) (result sql.Result, err error)
 		DeleteByUserID(ctx context.Context, userID int64) error
 	}
 }

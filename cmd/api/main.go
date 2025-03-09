@@ -34,6 +34,7 @@ func main() {
 	config := config{
 		addr: ":8080",
 		env:  env.GetString("ENV", "development"),
+
 		db: dbConfig{
 			addr:         env.GetString("DB_ADDR", "postgres://postgres:postgres@localhost:5432/go-ecommerce?sslmode=disable"),
 			maxIdleConns: env.GetInt("DB_MAX_IDLE_CONNS", 10),
@@ -101,7 +102,10 @@ func main() {
 		refreshAuthenticator: refreshAuthenticator,
 		mailer:               resendClient,
 		logger:               logger,
+		jobQueue:             make(chan Job, 100),
 	}
+	app.startJobWorker()
+	app.ScheduleExpiredSessionCleanup()
 	log.Println("name", env.GetString("FROM_EMAIL", "test"))
 	mux := app.mount()
 	log.Fatal(app.run(mux))

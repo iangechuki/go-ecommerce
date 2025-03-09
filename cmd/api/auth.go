@@ -66,7 +66,7 @@ func (app *application) registerUserHandler(w http.ResponseWriter, r *http.Reque
 
 	// send email with invite token(plain token)
 	verificationLink := fmt.Sprintf("%s/verify?token=%s", app.config.frontendURL, plainToken)
-
+	isProdEnv := app.config.env == "production"
 	vars := struct {
 		Username       string
 		ActivationLink string
@@ -74,13 +74,24 @@ func (app *application) registerUserHandler(w http.ResponseWriter, r *http.Reque
 		Username:       user.Email,
 		ActivationLink: verificationLink,
 	}
-	sendID, err := app.mailer.Send(mailer.UserWelcomeTemplate, user.Username, user.Email, vars, true)
-	if err != nil {
+	// instead of sending an email synchronously, we can send it asynchronously by queuing it as a
+	// background job in a separate goroutine
+	emailJob := Job{
+		Type: "sendEmail",
+		Payload: EmailPayload{
+			Template: mailer.UserWelcomeTemplate,
+			Username: user.Username,
+			Email:    user.Email,
+			Vars:     vars,
+			Debug:    !isProdEnv,
+			UserID:   user.ID,
+			Ctx:      ctx,
+		},
+	}
+	app.jobQueue <- emailJob
+	if err := app.jsonResponse(w, http.StatusCreated, user); err != nil {
 		app.internalServerError(w, r, err)
 	}
-	log.Println("Email sent,email id:", sendID)
-	jsonResponse(w, http.StatusCreated, user)
-
 }
 
 // verifyUserHandler godoc
@@ -166,6 +177,45 @@ func (app *application) loginUserHandler(w http.ResponseWriter, r *http.Request)
 		app.unauthorizedErrorResponse(w, r, fmt.Errorf("invalid credentials"), "invalid credentials")
 		return
 	}
+	if user.TwoFAEnabled {
+		tempToken, err := app.Generate2FAToken(user.ID)
+		if err != nil {
+			app.internalServerError(w, r, err)
+			return
+		}
+		response := struct {
+			Requires2FA bool   `json:"requires_2fa"`
+			Token       string `json:"token"`
+		}{
+			Requires2FA: true,
+			Token:       tempToken,
+		}
+		app.jsonResponse(w, http.StatusOK, response)
+		return
+
+	}
+	clientFingerprint := app.CreateClientFingerprint(r)
+	// check for existing session from the same device
+	existingSession, err := app.store.Sessions.GetByUserFingerprint(ctx, user.ID, clientFingerprint)
+	if err != nil {
+		switch err {
+		case store.ErrRecordNotFound:
+			break
+		default:
+			app.internalServerError(w, r, err)
+			return
+		}
+	}
+	if existingSession != nil {
+		if time.Since(existingSession.LastAccessed) < 5*time.Minute {
+			app.badRequestResponse(w, r, fmt.Errorf("please wait before requesting a new token"))
+			return
+		}
+		if err := app.store.Sessions.Delete(ctx, existingSession.ID); err != nil {
+			app.internalServerError(w, r, err)
+			return
+		}
+	}
 	accessToken, err := app.GenerateAccessToken(user.ID)
 	if err != nil {
 		app.internalServerError(w, r, err)
@@ -179,13 +229,14 @@ func (app *application) loginUserHandler(w http.ResponseWriter, r *http.Request)
 	tokenHash := sha256.Sum256([]byte(refreshToken))
 	hashString := hex.EncodeToString(tokenHash[:])
 	session := &store.Session{
-		UserID:       user.ID,
-		TokenHash:    hashString,
-		CreatedAt:    time.Now(),
-		ExpiresAt:    time.Now().Add(app.config.auth.refreshToken.exp),
-		IPAddress:    r.RemoteAddr,
-		UserAgent:    r.UserAgent(),
-		LastAccessed: time.Now(),
+		UserID:            user.ID,
+		TokenHash:         hashString,
+		CreatedAt:         time.Now(),
+		ExpiresAt:         time.Now().Add(app.config.auth.refreshToken.exp),
+		IPAddress:         r.RemoteAddr,
+		UserAgent:         r.UserAgent(),
+		ClientFingerprint: clientFingerprint,
+		LastAccessed:      time.Now(),
 	}
 	if err := app.store.Sessions.Create(ctx, session); err != nil {
 		app.internalServerError(w, r, err)
@@ -204,7 +255,9 @@ func (app *application) loginUserHandler(w http.ResponseWriter, r *http.Request)
 	http.SetCookie(w, cookie)
 	response := LoginResponse{User: user, AccessToken: accessToken}
 
-	jsonResponse(w, http.StatusOK, response)
+	if err := app.jsonResponse(w, http.StatusOK, response); err != nil {
+		app.internalServerError(w, r, err)
+	}
 }
 
 type RefreshTokenResponse struct {
@@ -224,15 +277,15 @@ type RefreshTokenResponse struct {
 // @Router       /auth/refresh [get]
 func (app *application) refreshTokenHandler(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("refresh_token")
+
 	if err != nil {
 		app.unauthorizedErrorResponse(w, r, fmt.Errorf("unauthorized"), "token is missing")
 		return
 	}
 	refreshToken := cookie.Value
-	tokenHash := sha256.Sum256([]byte(refreshToken))
-	hashString := hex.EncodeToString(tokenHash[:])
+
 	ctx := r.Context()
-	session, err := app.store.Sessions.GetByToken(ctx, hashString)
+	session, err := app.store.Sessions.GetByToken(ctx, refreshToken)
 
 	if err != nil {
 		switch err {
@@ -259,8 +312,10 @@ func (app *application) refreshTokenHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	response := RefreshTokenResponse{AccessToken: newAccessToken}
-	jsonResponse(w, http.StatusOK, response)
 
+	if err := app.jsonResponse(w, http.StatusOK, response); err != nil {
+		app.internalServerError(w, r, err)
+	}
 }
 
 // logoutUserHandler godoc
@@ -308,5 +363,8 @@ func (app *application) logoutUserHandler(w http.ResponseWriter, r *http.Request
 		HttpOnly: true,
 		Secure:   app.config.env == "production",
 	})
-	jsonResponse(w, http.StatusOK, "logged out successfully")
+
+	if err := app.jsonResponse(w, http.StatusOK, nil); err != nil {
+		app.internalServerError(w, r, err)
+	}
 }

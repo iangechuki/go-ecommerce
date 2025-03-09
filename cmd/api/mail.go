@@ -48,7 +48,9 @@ func (app *application) sendVerifyEmailTrial(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	log.Printf("email sent with id %s", sentId)
-	jsonResponse(w, http.StatusOK, "email sent successfully")
+	if err := app.jsonResponse(w, http.StatusOK, "email sent successfully"); err != nil {
+		app.internalServerError(w, r, err)
+	}
 }
 func (app *application) sendPasswordResetEmailTrial(w http.ResponseWriter, r *http.Request) {
 	sampleData := map[string]interface{}{
@@ -62,5 +64,7 @@ func (app *application) sendPasswordResetEmailTrial(w http.ResponseWriter, r *ht
 		return
 	}
 	log.Printf("email sent with id %s", sentId)
-	jsonResponse(w, http.StatusOK, "email sent successfully")
+	if err := app.jsonResponse(w, http.StatusOK, "email sent successfully"); err != nil {
+		app.internalServerError(w, r, err)
+	}
 }

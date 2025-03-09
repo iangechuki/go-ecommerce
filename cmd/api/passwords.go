@@ -74,7 +74,9 @@ func (app *application) forgotPasswordHandler(w http.ResponseWriter, r *http.Req
 	}
 
 	log.Printf("email sent with id %s", sendID)
-	jsonResponse(w, http.StatusOK, "email sent successfully")
+	if err := app.jsonResponse(w, http.StatusOK, "password reset email sent"); err != nil {
+		app.internalServerError(w, r, err)
+	}
 }
 
 type ResetPasswordPayload struct {
@@ -124,7 +126,10 @@ func (app *application) resetPassword(w http.ResponseWriter, r *http.Request) {
 		app.internalServerError(w, r, err)
 		return
 	}
-	jsonResponse(w, http.StatusOK, "password reset successfully")
+	if err := app.jsonResponse(w, http.StatusOK, "password reset successfully"); err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
 }
 
 type ChangePasswordPayload struct {
@@ -174,5 +179,7 @@ func (app *application) changePasswordHandler(w http.ResponseWriter, r *http.Req
 		app.internalServerError(w, r, err)
 		return
 	}
-	jsonResponse(w, http.StatusOK, "password changed successfully")
+	if err := app.jsonResponse(w, http.StatusOK, "password changed successfully"); err != nil {
+		app.internalServerError(w, r, err)
+	}
 }

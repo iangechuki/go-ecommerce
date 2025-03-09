@@ -26,6 +26,18 @@ definitions:
     required:
     - email
     type: object
+  main.Login2FAPayload:
+    properties:
+      code:
+        maxLength: 6
+        minLength: 6
+        type: string
+      token:
+        type: string
+    required:
+    - code
+    - token
+    type: object
   main.LoginPayload:
     properties:
       email:
@@ -89,6 +101,16 @@ definitions:
     required:
     - password
     type: object
+  main.Verify2FAPayload:
+    properties:
+      code:
+        type: string
+      secret:
+        type: string
+    required:
+    - code
+    - secret
+    type: object
 info:
   contact:
     email: support@swagger.io
@@ -101,6 +123,37 @@ info:
   termsOfService: http://swagger.io/terms/
   title: Go Ecommerce API
 paths:
+  /auth/2fa/login:
+    post:
+      consumes:
+      - application/json
+      description: Verify 2FA code and issue tokens
+      parameters:
+      - description: Login2FAPayload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/main.Login2FAPayload'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.LoginResponse'
+        "400":
+          description: Bad Request
+          schema: {}
+        "401":
+          description: Unauthorized
+          schema: {}
+        "500":
+          description: Internal Server Error
+          schema: {}
+      summary: Login with 2FA
+      tags:
+      - authentication
   /auth/forgot-password:
     post:
       consumes:
@@ -311,6 +364,55 @@ paths:
       summary: List products
       tags:
       - products
+  /user/2fa/enable:
+    get:
+      consumes:
+      - application/json
+      description: Enable 2FA
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Unauthorized
+          schema: {}
+        "500":
+          description: Internal Server Error
+          schema: {}
+      security:
+      - ApiKeyAuth: []
+      summary: Enable 2FA
+      tags:
+      - 2FA
+  /user/2fa/verify:
+    post:
+      consumes:
+      - application/json
+      description: Verify 2FA
+      parameters:
+      - description: Verify2FAPayload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/main.Verify2FAPayload'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Unauthorized
+          schema: {}
+        "500":
+          description: Internal Server Error
+          schema: {}
+      security:
+      - ApiKeyAuth: []
+      summary: Verify 2FA
+      tags:
+      - 2FA
   /user/change-password:
     post:
       consumes:
